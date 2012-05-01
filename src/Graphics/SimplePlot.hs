@@ -198,14 +198,17 @@ instance Plot [String] where
 
 -- | INTERNAL: Prepares 2D plots of haskell functions.
 render2D opt opt2d f = (opts $ sanitize (opt ++ [Style Lines]), plot2D f)
-    where   plot2D f = toString [(x, f x) | x <- [x1,s..x2]]
+    where   plot2D f = toString [(x, f x) | x <- maybe [x1,sx..x2] id $ for opt2d]
 
             (x1, x2) = range opt2d
-            s        = x1 + step opt2d
+            sx       = x1 + step opt2d
 
 -- | INTERNAL: Prepares 3D plots of haskell functions.
 render3D opt opt3d f = (opts $ sanitize (opt), plot3D f)
-    where   plot3D f = toString [(x, y, f x y) | x <- [x1,sx..x2], y <- [y1,sy..y2]]
+    where   plot3D f = toString [(x, y, f x y) | x <- xs, y <- ys]
+
+            xs = maybe [x1,sx..x2] id $ forX opt3d
+            ys = maybe [y1,sy..y2] id $ forY opt3d
 
             ((x1, x2), (y1, y2)) = (rangeX opt3d, rangeY opt3d)
             (sx, sy) = (x1 + stepX opt3d, y1 + stepY opt3d)
