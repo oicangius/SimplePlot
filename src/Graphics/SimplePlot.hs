@@ -36,7 +36,7 @@
 module Graphics.SimplePlot (
 
     -- * Plotting
-    Plot (plot),
+    Plot (plot, plot'),
 
     -- * Graphs for 2D and 3D plots
     Graph2D (..), Graph3D (..),
@@ -44,7 +44,8 @@ module Graphics.SimplePlot (
     -- * Configuration and other options
     TerminalType (..),
     Color (..), Style (..), -- Style2D (..),
-    Option (..), Option2D (..), Option3D (..)
+    Option (..), Option2D (..), Option3D (..),
+    GnuplotOption (..)
 
     ) where
 
@@ -71,9 +72,8 @@ data TerminalType = Aqua    -- ^ Output on Mac OS X (Aqua Terminal).
 data Style = Lines  -- ^ points in the plot are interconnected by lines.
            | Points -- ^ data points are little cross symbols.
            | Dots   -- ^ data points are real dots (approx the size of a pixel).
-    deriving Show
-
-{- Impulses Linespoints -}
+           | Impulses
+           | Linespoints
 
 -- | The Color of a graph.
 data Color = Red | Blue | Green | Yellow | Orange | Magenta | Cyan
@@ -81,7 +81,6 @@ data Color = Red | Blue | Green | Yellow | Orange | Magenta | Cyan
            | LightRed | LightBlue | LightGreen | LightMagenta
            | Violet | White | Brown | Grey | DarkGrey | Black
            | RGB Int Int Int -- ^ a custom color
-    deriving Show
 
 data Style2D = Boxerrorbars | Boxes | Boxyerrorbars
              | Filledcurves | Financebars | Fsteps | Histeps | Histograms
@@ -92,7 +91,6 @@ data Style2D = Boxerrorbars | Boxes | Boxyerrorbars
 data Option = Style Style   -- ^ The style for a graph.
             | Title String  -- ^ The title for a graph in a plot (or a filename like @plot1.dat@).
             | Color Color   -- ^ The line-color for the graph (or if it consist of 'Dots' or 'Points' the color of these)
-    deriving Show
 
 -- | Options which are exclusively available for 2D plots.
 data Option2D x y = Range x x | For [x] | Step x
@@ -118,6 +116,11 @@ data Graph3D x y z =
     | Gnuplot3D    [Option] [Option3D x y z] String
       -- ^ plots a custom function passed to Gnuplot (like @x*y@)
 
+-- | Options which can be used with 'plot''
+data GnuplotOption = Interactive -- ^ keeps gnuplot open, so that you can interact with the plot (only usefull with 'X11')
+                   | Debug       -- ^ prints the command used for running gnuplot.
+    deriving Eq
+
 -- | Provides the plot function for different kinds of graphs (2D and 3D)
 class Plot a where
 
@@ -126,71 +129,126 @@ class Plot a where
             -> a         -- ^ The graph to plot. A 'Graph2D' or 'Graph3D' or a list of these.
             -> IO Bool   -- ^ Whether the plot was successfull or not.
 
+    plot = plot' []
+
+    plot' :: [GnuplotOption]
+            -> TerminalType
+            -> a
+            -> IO Bool
 
 -- | 'plot' can be used to plot a single 'Graph2D'.
 instance (Fractional x, Enum x, Show x, Num y, Show y) => Plot (Graph2D x y) where
-    plot term graph = plot term [graph]
+    plot' options term graph = plot' options term [graph]
 
 -- | 'plot' can be used to plot a list of 'Graph2D'.
 instance (Fractional x, Enum x, Show x, Num y, Show y) => Plot [Graph2D x y] where
-    plot term graphs = exec [toString term] "plot" options datasources
-        where   (options, datasources) = unzip $ map prepare graphs
-                prepare (Gnuplot2D  opt opt3d g) = (opts $ sanitize opt, Right $ g)
-                prepare (Data2D     opt opt3d d) = (opts $ sanitize opt, Left  $ toString d)
-                prepare (Function2D opt opt3d f) = (opt', Left $ plotData)
-                    where   (opt', plotData) = render2D opt f
+    plot' options term graphs = exec options [toString term] "plot" options' datasources
+        where   (options', datasources) = unzip $ map prepare graphs
+                prepare (Gnuplot2D  opt opt2d g) = (opts $ sanitize opt, Right $ g)
+                prepare (Data2D     opt opt2d d) = (opts $ sanitize opt, Left  $ toString d)
+                prepare (Function2D opt opt2d f) = (opt', Left $ plotData)
+                    where   (opt', plotData) = render2D opt opt2d f
 
 -- | 'plot' can be used to plot a single 'Graph3D'.
 instance (Fractional x, Enum x, Show x, Fractional y, Enum y, Show y, Num z, Show z) => Plot (Graph3D x y z) where
-    plot term graph = plot term [graph]
+    plot' options term graph = plot' options term [graph]
 
 -- | 'plot' can be used to plot a list of 'Graph3D'
 instance (Fractional x, Enum x, Show x, Fractional y, Enum y, Show y, Num z, Show z) => Plot [Graph3D x y z] where
-    plot term graphs = exec [toString term] "splot" options datasources
-        where   (options, datasources) = unzip $ map prepare graphs
+    plot' options term graphs = exec options [toString term] "splot" options' datasources
+        where   (options', datasources) = unzip $ map prepare graphs
                 prepare (Gnuplot3D  opt opt3d g) = (opts $ sanitize opt, Right $ g)
                 prepare (Data3D     opt opt3d d) = (opts $ sanitize opt, Left  $ toString d)
                 prepare (Function3D opt opt3d f) = (opt', Left $ plotData)
-                    where   (opt', plotData) = render3D opt f
+                    where   (opt', plotData) = render3D opt opt3d f
 
 -- | A 2D function can be plotted directly using 'plot'
 instance (Fractional x, Enum x, Show x, Num y, Show y) => Plot (x -> y) where
-    plot term f = plot term $ Function2D [] [] f
+    plot' options term f = plot' options term $ Function2D [] [] f
 
 -- | A list of 2D functions can be plotted directly using 'plot'
 instance (Fractional x, Enum x, Show x, Num y, Show y) => Plot [x -> y] where
-    plot term fs = plot term $ map (Function2D [] []) fs
+    plot' options term fs = plot' options term $ map (Function2D [] []) fs
 
 -- | A 3D function can be plotted directly using 'plot'
 instance (Fractional x, Enum x, Show x, Fractional y, Enum y, Show y, Num z, Show z) => Plot (x -> y -> z) where
-    plot term f = plot term $ Function3D [] [] f
+    plot' options term f = plot' options term $ Function3D [] [] f
 
 -- | A list of 3D functions can be plotted directly using 'plot'
 instance (Fractional x, Enum x, Show x, Fractional y, Enum y, Show y, Num z, Show z) => Plot [x -> y -> z] where
-    plot term fs = plot term $ map (Function3D [] []) fs
+    plot' options term fs = plot' options term $ map (Function3D [] []) fs
 
 -- | A list of tuples can be plotted directly using 'plot'
 instance (Fractional x, Enum x, Num x, Show x, Num y, Show y) => Plot [(x, y)] where
-    plot term d = plot term $ Data2D [] [] d
+    plot' options term d = plot' options term $ Data2D [] [] d
 
 -- | A list of triples can be plotted directly using 'plot'
 instance (Fractional x, Enum x, Show x, Fractional y, Enum y, Show y, Num z, Show z) => Plot [(x, y, z)] where
-    plot term d = plot term $ Data3D [] [] d
+    plot' options term d = plot' options term $ Data3D [] [] d
 
--- | plot accepts a custom string which is then to be interpreted by gnu plot. The function will be interpreted as 'Gnuplot3D'.
+-- | plot accepts a custom string which is then to be interpreted by gnu plot.
+--   The function will be interpreted as 'Gnuplot3D'.
 instance Plot String where
-    plot term g = plot term $ Gnuplot3D [] [] g
+    plot' options term g = plot' options term $ Gnuplot3D [] [] g
 
+-- | plots mutliple 3D functions using gnuplots native function parser
+--   and renderer. The String will be interpreted as 'Gnuplot3D'.
 instance Plot [String] where
-    plot term g = plot term $ map (Gnuplot3D [] []) g
+    plot' options term g = plot' options term $ map (Gnuplot3D [] []) g
 
 -- | INTERNAL: Prepares 2D plots of haskell functions.
-render2D opt f = (opts $ sanitize (opt ++ [Style Lines]), plot2D f)
-plot2D f = toString [(x, f x) | x <- [-5,-4.95..5]]
+render2D opt opt2d f = (opts $ sanitize (opt ++ [Style Lines]), plot2D f)
+    where   plot2D f = toString [(x, f x) | x <- [x1,s..x2]]
+
+            (x1, x2) = range opt2d
+            s        = x1 + step opt2d
 
 -- | INTERNAL: Prepares 3D plots of haskell functions.
-render3D opt f = (opts $ sanitize (opt), plot3D f)
-plot3D f = toString [(x, y, f x y) | x <- [-5,-4.95..5], y <- [-5,-4.95..5]]
+render3D opt opt3d f = (opts $ sanitize (opt), plot3D f)
+    where   plot3D f = toString [(x, y, f x y) | x <- [x1,sx..x2], y <- [y1,sy..y2]]
+
+            ((x1, x2), (y1, y2)) = (rangeX opt3d, rangeY opt3d)
+            (sx, sy) = (x1 + stepX opt3d, y1 + stepY opt3d)
+
+
+for [] = Nothing
+for ((For xs) : _) = Just xs
+for (_ : xs) = for xs
+
+range [] = (-5, 5)
+range ((Range x1 x2) : _) = (x1, x2)
+range (_ : xs) = range xs
+
+step [] = 0.05
+step ((Step x) : _) = x
+step (_ : xs) = step xs
+
+
+forX [] = Nothing
+forX ((ForX xs) : _) = Just xs
+forX (_ : xs) = forX xs
+
+forY [] = Nothing
+forY ((ForY ys) : _) = Just ys
+forY (_ : ys) = forY ys
+
+rangeX [] = (-5, 5)
+rangeX ((RangeX x1 x2) : _) = (x1, x2)
+rangeX (_ : xs) = rangeX xs
+
+rangeY [] = (-5, 5)
+rangeY ((RangeY y1 y2) : _) = (y1, y2)
+rangeY (_ : ys) = rangeY ys
+
+stepX [] = 0.1
+stepX ((StepX x) : _) = x
+stepX (_ : xs) = stepX xs
+
+stepY [] = 0.1
+stepY ((StepY y) : _) = y
+stepY (_ : ys) = stepY ys
+
+
 
 -- | INTERNAL: Sanitizes options given via Graph-Objects
 sanitize = sortBy ord . nubBy dup
@@ -222,8 +280,8 @@ opts (x:xs) = toString x ++ " " ++ opts xs
 -- or so:
 --
 -- > exec ["set terminal x11 persist"] "splot" ["width lines", "with lines"] [Right "x*y", Right "sin(x) + cos(y)"]
-exec :: [String] -> String -> [String] -> [Either String String] -> IO Bool
-exec preamble plotfunc plotops datasets =
+exec :: [GnuplotOption] -> [String] -> String -> [String] -> [Either String String] -> IO Bool
+exec options preamble plotfunc plotops datasets =
     do
         let filenames = zipWith (\x y -> x ++ show y ++ ".dat")
                                 (cycle ["plot"]) [1..length datasets]
@@ -240,7 +298,11 @@ exec preamble plotfunc plotops datasets =
             plotcmd  = foldl1  (\x y -> x ++ "; " ++ y)
                                (preamble ++ [plotfunc ++ " " ++ plotstmt])
         
-        exitCode <- rawSystem "gnuplot" ["-e", plotcmd]
+            args = ["-e", plotcmd] ++ if Interactive `elem` options then ["-"] else []
+
+        if Debug `elem` options then putStrLn plotcmd else return ()
+
+        exitCode <- rawSystem "gnuplot" args
 
         return $ exitCode == ExitSuccess
 
@@ -262,6 +324,8 @@ instance GnuplotIdiom Style where
         Lines   -> "with lines"
         Points  -> "with points"
         Dots    -> "with dots"
+        Impulses -> "with impulses"
+        Linespoints -> "with linespoints"
 
 instance GnuplotIdiom Option where
     toString x = case x of
