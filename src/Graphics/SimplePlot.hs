@@ -20,7 +20,7 @@
 --
 -- > plot X11 sin
 --
--- Output can go into a file, too:
+-- Output can go into a file, too (See 'TerminalType'):
 --
 -- > plot (PNG "plot.png") (sin . cos)
 --
@@ -33,6 +33,21 @@
 -- For 3D-Plots there is a shortcut available by directly passing a String:
 --
 -- > plot X11 "x*y"
+--
+-- Multiple graphs can be shown simply by passing a list of these:
+--
+-- > plot X11 [ Data2D [Title "Graph 1", Color Red] [] [(x, x ** 3) | x <- [-4,-3.9..4]]
+-- >          , Function2D [Title "Function 2", Color Blue] [] (\x -> negate $ x ** 2) ]
+--
+-- For 3D Graphs it is useful to be able to interact with the graph (See 'plot'' and 'GnuplotOption'):
+--
+-- > plot' [Interactive] X11 $ Gnuplot3D [Color Magenta] [] "x ** 2 + y ** 3"
+--
+-- If you want to know the command that SimplePlot uses to plot your graph,
+-- turn on debugging:
+--
+-- > plot' [Debug] X11 $ Gnuplot3D [Color Magenta] [] "x ** 4 + y ** 3"
+-- > > set term x11 persist; splot x ** 4 + y ** 3 lc rgb "magenta"
 module Graphics.SimplePlot (
 
     -- * Plotting
@@ -93,17 +108,24 @@ data Option = Style Style   -- ^ The style for a graph.
             | Color Color   -- ^ The line-color for the graph (or if it consist of 'Dots' or 'Points' the color of these)
 
 -- | Options which are exclusively available for 2D plots.
-data Option2D x y = Range x x | For [x] | Step x
+data Option2D x y = Range x x -- ^ Plots the function for the specified x range
+                  | For [x]   -- ^ Plots the function only for the given x values
+                  | Step x    -- ^ Uses the given step-size for plotting along the x-axis
 
 -- | Options which are exclusively available for 3D plots.
-data Option3D x y z = RangeX x x | RangeY y y | ForX [x] | ForY [y] | StepX x | StepY y
+data Option3D x y z = RangeX x x -- ^ Plots the function for the specified x range
+                    | RangeY y y -- ^ Plots the function for the specified y range
+                    | ForX [x]   -- ^ Plots the function only for the given x values
+                    | ForY [y]   -- ^ Plots the function only for the given y values
+                    | StepX x    -- ^ Uses the given step-size for plotting along the x-axis
+                    | StepY y    -- ^ Uses the given step-size for plotting along the y-axis
 
 -- | A two dimensional set of data to plot.
 data Graph2D x y =
       Function2D   [Option] [Option2D x y] (x -> y)
     | Data2D       [Option] [Option2D x y] [(x, y)]
     | Gnuplot2D    [Option] [Option2D x y] String
-      -- ^ plots a custom function passed to Gnuplot (like @x**2 + 10@) 
+      -- ^ plots a custom function passed to Gnuplot (like @x**2 + 10@)
 
 -- | A three dimensional set of data to plot.
 data Graph3D x y z =
@@ -111,7 +133,7 @@ data Graph3D x y z =
       -- ^ plots a Haskell function
 
     | Data3D       [Option] [Option3D x y z] [(x, y, z)]
-      -- ^ plots a dataset
+      -- ^ plots a given dataset
 
     | Gnuplot3D    [Option] [Option3D x y z] String
       -- ^ plots a custom function passed to Gnuplot (like @x*y@)
@@ -250,7 +272,6 @@ stepX (_ : xs) = stepX xs
 stepY [] = 0.1
 stepY ((StepY y) : _) = y
 stepY (_ : ys) = stepY ys
-
 
 
 -- | INTERNAL: Sanitizes options given via Graph-Objects
