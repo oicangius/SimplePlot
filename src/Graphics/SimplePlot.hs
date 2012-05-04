@@ -123,17 +123,21 @@ data Option3D x y z = RangeX x x -- ^ Plots the function for the specified x ran
 -- | A two dimensional set of data to plot.
 data Graph2D x y =
       Function2D   [Option] [Option2D x y] (x -> y)
+      -- ^ plots a Haskell function @x -> y@
+
     | Data2D       [Option] [Option2D x y] [(x, y)]
+      -- ^ plots a set of tuples.
+
     | Gnuplot2D    [Option] [Option2D x y] String
       -- ^ plots a custom function passed to Gnuplot (like @x**2 + 10@)
 
 -- | A three dimensional set of data to plot.
 data Graph3D x y z =
       Function3D   [Option] [Option3D x y z] (x -> y -> z)
-      -- ^ plots a Haskell function
+      -- ^ plots a Haskell function @x -> y -> z@
 
     | Data3D       [Option] [Option3D x y z] [(x, y, z)]
-      -- ^ plots a given dataset
+      -- ^ plots a set of triples.
 
     | Gnuplot3D    [Option] [Option3D x y z] String
       -- ^ plots a custom function passed to Gnuplot (like @x*y@)
